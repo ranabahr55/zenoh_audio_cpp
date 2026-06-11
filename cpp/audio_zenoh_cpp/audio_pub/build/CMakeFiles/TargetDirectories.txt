@@ -1,3 +1,0 @@
-/home/rana/audio2/cpp/audio_zenoh_cpp/audio_pub/build/CMakeFiles/audio_pub.dir
-/home/rana/audio2/cpp/audio_zenoh_cpp/audio_pub/build/CMakeFiles/edit_cache.dir
-/home/rana/audio2/cpp/audio_zenoh_cpp/audio_pub/build/CMakeFiles/rebuild_cache.dir
