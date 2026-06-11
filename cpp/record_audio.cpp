@@ -146,13 +146,14 @@ int main() {
     }
 
     // State-of-the-art denoise + FLAC encode via ffmpeg's afftdn.
+    //   highpass=f=120 : high-pass filter to remove low-frequency noise
     //   nr=40     : noise reduction amount (dB)
     //   nf=-35    : noise floor (dB)
-    //   nt=w       : white-noise tracking, adapts to the take
+    //   nt=s       : spectral noise tracking, adapts to the take
     //   loudnorm   : gentle EBU R128 loudness normalization
     std::string cmd =
         "ffmpeg -y -loglevel error -i \"" + std::string(kRawWav) + "\" "
-        "-af \"afftdn=nr=40:nf=-35:nt=s,loudnorm=I=-16:TP=-1.5:LRA=11\" "
+        "-af \"highpass=f=120,afftdn=nr=40:nf=-35:nt=s,loudnorm=I=-16:TP=-1.5:LRA=11\" "
         "-c:a flac -compression_level 12 -sample_fmt s32 \"" +
         std::string(kOutput) + "\"";
 
