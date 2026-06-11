@@ -44,6 +44,14 @@
 #include <string>
 #include <vector>
 
+#include <cerrno>
+#include <arpa/inet.h>
+#include <fcntl.h>
+#include <netinet/in.h>
+#include <sys/select.h>
+#include <sys/socket.h>
+#include <unistd.h>
+
 #include "zenoh.hxx"
 
 using namespace zenoh;
@@ -82,6 +90,13 @@ public:
         auto it = values_.find(k);
         return it == values_.end() ? def : std::stoi(it->second);
     }
+    bool boolean(const std::string& k, bool def) const {
+        auto it = values_.find(k);
+        if (it == values_.end()) return def;
+        std::string v = it->second;
+        for (auto& c : v) c = static_cast<char>(::tolower(c));
+        return v == "1" || v == "true" || v == "yes" || v == "on";
+    }
 
 private:
     static std::string trim(std::string s) {
@@ -112,6 +127,111 @@ std::string to_json5_endpoints(const std::string& csv) {
     }
     out += "]";
     return out;
+}
+
+// Split a ";"-separated list into trimmed, non-empty items.
+std::vector<std::string> split_semi(const std::string& csv) {
+    std::vector<std::string> out;
+    std::stringstream ss(csv);
+    std::string item;
+    while (std::getline(ss, item, ';')) {
+        auto b = item.find_first_not_of(" \t");
+        if (b == std::string::npos) continue;
+        auto e = item.find_last_not_of(" \t");
+        out.push_back(item.substr(b, e - b + 1));
+    }
+    return out;
+}
+
+// Quick "is something listening on tcp/<ip>:<port>?" check, using a
+// non-blocking connect with a short timeout. We use this to filter the tailnet
+// down to the host(s) actually running the Zenoh publisher: handing Zenoh a long
+// list of dead endpoints (idle/asleep peers) stalls its connection manager and
+// the real publisher's audio never gets through, so we only pass live ones.
+bool tcp_reachable(const std::string& ip, int port, int timeout_ms) {
+    int fd = ::socket(AF_INET, SOCK_STREAM, 0);
+    if (fd < 0) return false;
+
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(static_cast<std::uint16_t>(port));
+    if (inet_pton(AF_INET, ip.c_str(), &addr.sin_addr) != 1) {
+        ::close(fd);
+        return false;
+    }
+
+    int flags = ::fcntl(fd, F_GETFL, 0);
+    ::fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+
+    bool ok = false;
+    int r = ::connect(fd, reinterpret_cast<sockaddr*>(&addr), sizeof(addr));
+    if (r == 0) {
+        ok = true;  // connected immediately (e.g. same host)
+    } else if (errno == EINPROGRESS) {
+        fd_set wset;
+        FD_ZERO(&wset);
+        FD_SET(fd, &wset);
+        timeval tv{timeout_ms / 1000, (timeout_ms % 1000) * 1000};
+        if (::select(fd + 1, nullptr, &wset, nullptr, &tv) > 0) {
+            int err = 0;
+            socklen_t len = sizeof(err);
+            ::getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &len);
+            ok = (err == 0);
+        }
+    }
+    ::close(fd);
+    return ok;
+}
+
+// ---------------------------------------------------------------------------
+// Discover the publisher's Tailscale endpoint(s) to connect to.
+//
+// If `tailscale_peer` is set we trust it verbatim (IP or MagicDNS name,
+// ";"-separated). Otherwise we ask the local tailscaled via `tailscale status`
+// for every online peer (and this device itself, in case the publisher runs on
+// the same host), then PROBE each on `port` and keep only the ones actually
+// listening — i.e. the host(s) running the publisher. Returns "tcp/<ip>:<port>".
+// ---------------------------------------------------------------------------
+std::vector<std::string> tailscale_connect_endpoints(const std::string& peer_cfg,
+                                                     int port) {
+    std::vector<std::string> eps;
+    for (const auto& p : split_semi(peer_cfg))
+        eps.push_back("tcp/" + p + ":" + std::to_string(port));
+    if (!eps.empty()) return eps;  // explicit peer(s) win — trust the user
+
+    FILE* pipe = popen("tailscale status 2>/dev/null", "r");
+    if (!pipe) {
+        std::fprintf(stderr, "[tailscale] could not run `tailscale status`.\n");
+        return eps;
+    }
+    std::vector<std::string> candidates;
+    char line[1024];
+    while (std::fgets(line, sizeof(line), pipe)) {
+        std::string s(line);
+        std::string ip = s.substr(0, s.find_first_of(" \t"));
+        if (ip.rfind("100.", 0) != 0) continue;                 // IPv4 tailnet rows
+        if (s.find("offline") != std::string::npos) continue;   // skip offline peers
+        // Includes THIS device's own IP (first row) so a publisher on the SAME
+        // host — which listens on our own Tailscale IP — is probed too.
+        candidates.push_back(ip);
+    }
+    pclose(pipe);
+
+    for (const auto& ip : candidates) {
+        if (tcp_reachable(ip, port, 400))
+            eps.push_back("tcp/" + ip + ":" + std::to_string(port));
+    }
+
+    if (eps.empty())
+        std::fprintf(stderr,
+            "[tailscale] scanned %zu tailnet host(s); none listening on :%d. "
+            "Is the publisher up with tailscale=1?\n",
+            candidates.size(), port);
+    else
+        std::fprintf(stderr,
+            "[tailscale] found %zu publisher endpoint(s) of %zu host(s) scanned.\n",
+            eps.size(), candidates.size());
+    return eps;
 }
 
 // ---------------------------------------------------------------------------
@@ -313,8 +433,26 @@ int main(int argc, char** argv) {
 
     zenoh::Config zcfg = zenoh::Config::create_default();
     const std::string mode    = cfg.str("mode", "peer");
-    const std::string connect = cfg.str("connect", "");
+    std::string connect = cfg.str("connect", "");
     const std::string listen  = cfg.str("listen", "");
+
+    // --- Tailscale streaming ----------------------------------------------
+    // tailscale=1: auto-discover the publisher's Tailscale endpoint(s) and
+    // connect to them over the tailnet. Tailscale has no multicast, so we turn
+    // off scouting and rely on the explicit TCP connect endpoint(s) below.
+    const bool use_tailscale = cfg.boolean("tailscale", false);
+    if (use_tailscale) {
+        const int ts_port = cfg.integer("tailscale_port", 7447);
+        auto eps = tailscale_connect_endpoints(cfg.str("tailscale_peer", ""),
+                                               ts_port);
+        for (const auto& e : eps)
+            connect += (connect.empty() ? "" : ";") + e;
+        zcfg.insert_json5("scouting/multicast/enabled", "false");
+        if (!connect.empty())
+            std::fprintf(stderr,
+                "Tailscale streaming ON — connecting to: %s\n", connect.c_str());
+    }
+
     zcfg.insert_json5("mode", "\"" + mode + "\"");
     if (!connect.empty())
         zcfg.insert_json5("connect/endpoints", to_json5_endpoints(connect));

@@ -24,10 +24,12 @@ Usage:
 
 import ctypes
 import ctypes.util
+import json
 import os
 import queue
 import signal
 import struct
+import subprocess
 import sys
 import threading
 
@@ -147,11 +149,78 @@ class OpusDecoder:
 # --------------------------------------------------------------------------- #
 #  Main
 # --------------------------------------------------------------------------- #
+def _tcp_reachable(ip, port, timeout=0.4):
+    """True if something accepts a TCP connection on ip:port within `timeout`."""
+    import socket
+    try:
+        with socket.create_connection((ip, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def tailscale_connect_endpoints(cfg):
+    """Return the Zenoh `connect` endpoints for the Tailscale publisher.
+
+    If `tailscale_peer` is set in the config we trust it (IP or MagicDNS name,
+    semicolon-separated). Otherwise we ask the local tailscaled for every node on
+    the tailnet (peers + this device, in case the publisher is on the same host),
+    then PROBE each on `tailscale_port` and keep only the host(s) actually
+    listening — i.e. the publisher. Handing Zenoh a long list of dead endpoints
+    (idle/asleep peers) stalls its connection manager and the real publisher's
+    audio never gets through, so the probe is what makes auto-discovery reliable.
+    """
+    port = int(cfg.get("tailscale_port", 7447))
+    explicit = [p.strip() for p in cfg.get("tailscale_peer", "").split(";") if p.strip()]
+    if explicit:
+        return [f"tcp/{p}:{port}" for p in explicit]  # trust the user verbatim
+
+    try:
+        out = subprocess.check_output(
+            ["tailscale", "status", "--json"], text=True, timeout=5)
+        data = json.loads(out)
+    except Exception as e:  # CLI missing, not logged in, daemon down, etc.
+        print(f"[tailscale] could not auto-discover peers: {e}", file=sys.stderr)
+        return []
+
+    nodes = list((data.get("Peer") or {}).values())
+    self_node = data.get("Self")
+    if self_node:
+        nodes.append(self_node)
+
+    candidates = []
+    for node in nodes:
+        if node is not self_node and not node.get("Online", False):
+            continue  # skip offline remote peers (but always keep self)
+        for ip in node.get("TailscaleIPs") or []:
+            if ":" not in ip:  # IPv4 only
+                candidates.append(ip)
+
+    endpoints = [f"tcp/{ip}:{port}" for ip in candidates if _tcp_reachable(ip, port)]
+    if endpoints:
+        print(f"[tailscale] found {len(endpoints)} publisher endpoint(s) of "
+              f"{len(candidates)} host(s) scanned: " + ", ".join(endpoints))
+    else:
+        print(f"[tailscale] scanned {len(candidates)} tailnet host(s); none "
+              f"listening on :{port}. Is the publisher up with tailscale=1?",
+              file=sys.stderr)
+    return endpoints
+
+
 def build_zenoh_config(cfg):
     zconf = zenoh.Config()
     zconf.insert_json5("mode", f'"{cfg.get("mode", "peer")}"')
     connect = [e.strip() for e in cfg.get("connect", "").split(";") if e.strip()]
     listen = [e.strip() for e in cfg.get("listen", "").split(";") if e.strip()]
+
+    # Stream over Tailscale instead of local Wi-Fi: connect to the publisher's
+    # Tailscale endpoint(s) and disable multicast scouting (Tailscale has none).
+    use_tailscale = str(cfg.get("tailscale", "0")).strip().lower() in (
+        "1", "true", "yes", "on")
+    if use_tailscale:
+        connect += tailscale_connect_endpoints(cfg)
+        zconf.insert_json5("scouting/multicast/enabled", "false")
+
     if connect:
         zconf.insert_json5("connect/endpoints",
                            "[" + ",".join(f'"{e}"' for e in connect) + "]")

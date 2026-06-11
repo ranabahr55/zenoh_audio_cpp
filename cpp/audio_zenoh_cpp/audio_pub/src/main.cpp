@@ -19,12 +19,17 @@
 #include <cstdint>
 #include <cstdio>
 #include <csignal>
+#include <cstring>
 #include <fstream>
 #include <map>
 #include <memory>
 #include <sstream>
 #include <string>
 #include <vector>
+
+#include <arpa/inet.h>
+#include <ifaddrs.h>
+#include <net/if.h>
 
 #include "zenoh.hxx"
 
@@ -106,6 +111,42 @@ std::string to_json5_endpoints(const std::string& csv) {
     return out;
 }
 
+// ---------------------------------------------------------------------------
+// Return THIS device's Tailscale IPv4 address, or "" if it isn't on a tailnet.
+//
+// Tailscale assigns each node a stable address from the 100.64.0.0/10 CGNAT
+// range and exposes it on an interface named "tailscale0" (Linux). We scan the
+// live interfaces directly instead of shelling out to the `tailscale` CLI, so
+// detection works without extra privileges or PATH assumptions. Preference:
+// an address on a "tailscale*" interface first, otherwise any up interface
+// holding a 100.64.0.0/10 address.
+// ---------------------------------------------------------------------------
+std::string detect_tailscale_ip() {
+    struct ifaddrs* ifaddr = nullptr;
+    if (getifaddrs(&ifaddr) != 0) return "";
+
+    std::string by_name, by_range;
+    for (struct ifaddrs* ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
+        if (!ifa->ifa_addr || ifa->ifa_addr->sa_family != AF_INET) continue;
+        if (!(ifa->ifa_flags & IFF_UP)) continue;
+
+        auto* sin = reinterpret_cast<struct sockaddr_in*>(ifa->ifa_addr);
+        char buf[INET_ADDRSTRLEN] = {0};
+        if (!inet_ntop(AF_INET, &sin->sin_addr, buf, sizeof(buf))) continue;
+
+        // 100.64.0.0/10  ==  100.64.0.0 .. 100.127.255.255
+        const std::uint32_t a = ntohl(sin->sin_addr.s_addr);
+        const bool in_cgnat = (a & 0xFFC00000u) == 0x64400000u;
+
+        if (ifa->ifa_name && std::strncmp(ifa->ifa_name, "tailscale", 9) == 0)
+            by_name = buf;                       // most reliable: the TS device
+        else if (in_cgnat && by_range.empty())
+            by_range = buf;                      // fallback: any 100.64/10 addr
+    }
+    freeifaddrs(ifaddr);
+    return !by_name.empty() ? by_name : by_range;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -181,8 +222,35 @@ int main(int argc, char** argv) {
 
     zenoh::Config zcfg = zenoh::Config::create_default();
     const std::string mode    = cfg.str("mode", "peer");
-    const std::string connect = cfg.str("connect", "");
-    const std::string listen  = cfg.str("listen", "");
+    std::string connect = cfg.str("connect", "");
+    std::string listen  = cfg.str("listen", "");
+
+    // --- Tailscale streaming ----------------------------------------------
+    // tailscale=1: auto-detect this device's Tailscale IP and listen on it so
+    // the subscriber can reach us over the tailnet. Tailscale has no multicast,
+    // so we turn off scouting and rely on the explicit TCP endpoint below.
+    const bool use_tailscale = cfg.boolean("tailscale", false);
+    if (use_tailscale) {
+        const int ts_port = cfg.integer("tailscale_port", 7447);
+        const std::string ts_ip = detect_tailscale_ip();
+        if (ts_ip.empty()) {
+            std::fprintf(stderr,
+                "tailscale=1 but no Tailscale IP found on this device "
+                "(is `tailscale up` running?). Falling back to local "
+                "Wi-Fi/LAN settings.\n");
+        } else {
+            const std::string ep =
+                "tcp/" + ts_ip + ":" + std::to_string(ts_port);
+            listen = ep;            // bind the publisher to the Tailscale IP
+            zcfg.insert_json5("scouting/multicast/enabled", "false");
+            std::fprintf(stderr,
+                "Tailscale streaming ON — publishing on %s\n"
+                "   (subscriber will auto-discover this, or set "
+                "tailscale_peer=%s)\n",
+                ep.c_str(), ts_ip.c_str());
+        }
+    }
+
     zcfg.insert_json5("mode", "\"" + mode + "\"");
     if (!connect.empty())
         zcfg.insert_json5("connect/endpoints", to_json5_endpoints(connect));

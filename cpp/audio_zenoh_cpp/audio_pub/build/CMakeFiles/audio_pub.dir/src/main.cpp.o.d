@@ -1,10 +1,9 @@
-CMakeFiles/audio_player.dir/src/main.cpp.o: \
- /home/rana/audio2/cpp/audio_zenoh_cpp/audio_sub/player/src/main.cpp \
+CMakeFiles/audio_pub.dir/src/main.cpp.o: \
+ /home/rana/audio2/cpp/audio_zenoh_cpp/audio_pub/src/main.cpp \
  /usr/include/stdc-predef.h /home/rana/anaconda3/include/opus/opus.h \
  /home/rana/anaconda3/include/opus/opus_types.h \
  /home/rana/anaconda3/include/opus/opus_defines.h \
- /usr/include/portaudio.h /usr/include/c++/11/atomic \
- /usr/include/c++/11/bits/atomic_base.h \
+ /usr/include/c++/11/atomic /usr/include/c++/11/bits/atomic_base.h \
  /usr/include/x86_64-linux-gnu/c++/11/bits/c++config.h \
  /usr/include/x86_64-linux-gnu/c++/11/bits/os_defines.h \
  /usr/include/features.h /usr/include/features-time64.h \
@@ -40,14 +39,8 @@ CMakeFiles/audio_player.dir/src/main.cpp.o: \
  /usr/include/x86_64-linux-gnu/bits/floatn.h \
  /usr/include/x86_64-linux-gnu/bits/floatn-common.h \
  /usr/include/x86_64-linux-gnu/bits/stdio.h \
- /usr/include/x86_64-linux-gnu/bits/stdio2.h /usr/include/c++/11/cstring \
- /usr/include/string.h \
- /usr/include/x86_64-linux-gnu/bits/types/locale_t.h \
- /usr/include/x86_64-linux-gnu/bits/types/__locale_t.h \
- /usr/include/strings.h \
- /usr/include/x86_64-linux-gnu/bits/strings_fortified.h \
- /usr/include/x86_64-linux-gnu/bits/string_fortified.h \
- /usr/include/c++/11/csignal /usr/include/signal.h \
+ /usr/include/x86_64-linux-gnu/bits/stdio2.h /usr/include/c++/11/csignal \
+ /usr/include/signal.h \
  /usr/include/x86_64-linux-gnu/bits/signum-generic.h \
  /usr/include/x86_64-linux-gnu/bits/signum-arch.h \
  /usr/include/x86_64-linux-gnu/bits/types/sig_atomic_t.h \
@@ -89,6 +82,12 @@ CMakeFiles/audio_player.dir/src/main.cpp.o: \
  /usr/include/x86_64-linux-gnu/bits/struct_rwlock.h \
  /usr/include/x86_64-linux-gnu/bits/sigthread.h \
  /usr/include/x86_64-linux-gnu/bits/signal_ext.h \
+ /usr/include/c++/11/cstring /usr/include/string.h \
+ /usr/include/x86_64-linux-gnu/bits/types/locale_t.h \
+ /usr/include/x86_64-linux-gnu/bits/types/__locale_t.h \
+ /usr/include/strings.h \
+ /usr/include/x86_64-linux-gnu/bits/strings_fortified.h \
+ /usr/include/x86_64-linux-gnu/bits/string_fortified.h \
  /usr/include/c++/11/fstream /usr/include/c++/11/istream \
  /usr/include/c++/11/ios /usr/include/c++/11/iosfwd \
  /usr/include/c++/11/bits/stringfwd.h \
@@ -216,12 +215,7 @@ CMakeFiles/audio_player.dir/src/main.cpp.o: \
  /usr/include/c++/11/bits/shared_ptr_atomic.h \
  /usr/include/c++/11/backward/auto_ptr.h \
  /usr/include/c++/11/pstl/glue_memory_defs.h \
- /usr/include/c++/11/pstl/execution_defs.h /usr/include/c++/11/mutex \
- /usr/include/c++/11/chrono /usr/include/c++/11/ratio \
- /usr/include/c++/11/limits /usr/include/c++/11/ctime \
- /usr/include/c++/11/bits/parse_numbers.h \
- /usr/include/c++/11/bits/std_mutex.h \
- /usr/include/c++/11/bits/unique_lock.h /usr/include/c++/11/sstream \
+ /usr/include/c++/11/pstl/execution_defs.h /usr/include/c++/11/sstream \
  /usr/include/c++/11/bits/sstream.tcc /usr/include/c++/11/vector \
  /usr/include/c++/11/bits/stl_vector.h \
  /usr/include/c++/11/bits/stl_bvector.h \
@@ -243,14 +237,9 @@ CMakeFiles/audio_player.dir/src/main.cpp.o: \
  /usr/include/asm-generic/sockios.h \
  /usr/include/x86_64-linux-gnu/bits/types/struct_osockaddr.h \
  /usr/include/x86_64-linux-gnu/bits/socket2.h \
- /usr/include/x86_64-linux-gnu/bits/in.h /usr/include/fcntl.h \
- /usr/include/x86_64-linux-gnu/bits/fcntl.h \
- /usr/include/x86_64-linux-gnu/bits/fcntl-linux.h \
- /usr/include/linux/falloc.h /usr/include/x86_64-linux-gnu/bits/stat.h \
- /usr/include/x86_64-linux-gnu/bits/struct_stat.h \
- /usr/include/x86_64-linux-gnu/bits/fcntl2.h /usr/include/zenoh.hxx \
- /usr/include/zenoh/api.hxx /usr/include/zenoh/api/bytes.hxx \
- /usr/include/zenoh/detail/closures.hxx \
+ /usr/include/x86_64-linux-gnu/bits/in.h /usr/include/ifaddrs.h \
+ /usr/include/net/if.h /usr/include/zenoh.hxx /usr/include/zenoh/api.hxx \
+ /usr/include/zenoh/api/bytes.hxx /usr/include/zenoh/detail/closures.hxx \
  /usr/include/zenoh/detail/commons.hxx /usr/include/c++/11/iterator \
  /usr/include/c++/11/bits/stream_iterator.h \
  /usr/include/zenoh/api/base.hxx /usr/include/c++/11/cstddef \
@@ -266,6 +255,7 @@ CMakeFiles/audio_player.dir/src/main.cpp.o: \
  /usr/local/include/zenoh_macros.h /usr/local/include/zenoh_memory.h \
  /usr/include/zenoh/api/closures.hxx /usr/include/zenoh/api/interop.hxx \
  /usr/include/zenoh/api/channels.hxx /usr/include/c++/11/variant \
+ /usr/include/c++/11/bits/parse_numbers.h \
  /usr/include/zenoh/api/query.hxx /usr/include/c++/11/functional \
  /usr/include/c++/11/bits/std_function.h \
  /usr/include/c++/11/unordered_map /usr/include/c++/11/bits/hashtable.h \
@@ -279,7 +269,7 @@ CMakeFiles/audio_player.dir/src/main.cpp.o: \
  /usr/include/zenoh/api/keyexpr.hxx /usr/include/zenoh/api/timestamp.hxx \
  /usr/include/zenoh/api/id.hxx /usr/include/c++/11/iomanip \
  /usr/include/c++/11/locale \
- /usr/include/c++/11/bits/locale_facets_nonio.h \
+ /usr/include/c++/11/bits/locale_facets_nonio.h /usr/include/c++/11/ctime \
  /usr/include/x86_64-linux-gnu/c++/11/bits/time_members.h \
  /usr/include/x86_64-linux-gnu/c++/11/bits/messages_members.h \
  /usr/include/libintl.h /usr/include/c++/11/bits/locale_facets_nonio.tcc \
@@ -301,4 +291,9 @@ CMakeFiles/audio_player.dir/src/main.cpp.o: \
  /usr/include/c++/11/set /usr/include/c++/11/bits/stl_set.h \
  /usr/include/c++/11/bits/stl_multiset.h \
  /usr/include/c++/11/unordered_set \
- /usr/include/c++/11/bits/unordered_set.h
+ /usr/include/c++/11/bits/unordered_set.h \
+ /home/rana/audio2/cpp/audio_zenoh_cpp/audio_pub/include/recorder.hpp \
+ /usr/include/portaudio.h /usr/include/c++/11/condition_variable \
+ /usr/include/c++/11/chrono /usr/include/c++/11/ratio \
+ /usr/include/c++/11/limits /usr/include/c++/11/bits/std_mutex.h \
+ /usr/include/c++/11/bits/unique_lock.h /usr/include/c++/11/mutex
